@@ -1,4 +1,3 @@
-# КЛІТИНКА 1: Імпорти та завантаження артефактів з Кроку 1
 import torch
 import pickle
 import json
@@ -28,12 +27,11 @@ df = pd.read_csv("Dataset/release_train_patients")
 diagnoses = metadata["diagnoses"]
 symptoms  = metadata["symptoms"]
 
-print(f"✅ Граф: {G.number_of_nodes()} вузлів, {G.number_of_edges()} ребер")
-print(f"✅ Діагнозів: {len(diagnoses)}")
-print(f"✅ Симптомів: {len(symptoms)}")
-print(f"✅ Пацієнтів: {len(df):,}")
+print(f"Граф: {G.number_of_nodes()} вузлів, {G.number_of_edges()} ребер")
+print(f"Діагнозів: {len(diagnoses)}")
+print(f"Симптомів: {len(symptoms)}")
+print(f"Пацієнтів: {len(df):,}")
 
-# КЛІТИНКА 2: Завантаження BioBERT
 MODEL_NAME = "dmis-lab/biobert-base-cased-v1.2"
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
@@ -43,9 +41,8 @@ model.eval()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model  = model.to(device)
 
-print(f"✅ BioBERT завантажено. Пристрій: {device}")
+print(f"BioBERT завантажено. Пристрій: {device}")
 
-# КЛІТИНКА 3: Базові функції
 def encode_text(text: str) -> np.ndarray:
     inputs = tokenizer(
         text,
@@ -73,9 +70,8 @@ def translate_to_english(text: str) -> str:
     except:
         return text
 
-print("✅ Функції визначено")
+print("Функції визначено")
 
-# КЛІТИНКА 4: Словник кодів → назви (з symptom_names)
 symptom_names = {}
 for code, info in evidences.items():
     question = info.get("question_en", "")
@@ -96,9 +92,8 @@ for code, info in evidences.items():
     else:
         symptom_names[code] = code
 
-print(f"✅ symptom_names: {len(symptom_names)} записів")
+print(f"symptom_names: {len(symptom_names)} записів")
 
-# КЛІТИНКА 5: Виправлений розрахунок α_ij (унікальні симптоми на пацієнта)
 co_occurrence  = defaultdict(lambda: defaultdict(int))
 diagnosis_count = defaultdict(int)
 
@@ -113,7 +108,6 @@ for _, row in df.iterrows():
     except:
         continue
 
-    # Унікальні базові коди для цього пацієнта
     seen_base_codes = set()
     for ev_code in evid_list:
         base_code = ev_code.split("_@_")[0]
@@ -123,7 +117,6 @@ for _, row in df.iterrows():
         ev_name = symptom_names.get(base_code, base_code)
         co_occurrence[diagnosis][ev_name] += 1
 
-# Оновлюємо ваги в графі
 for diagnosis, symp_freq in co_occurrence.items():
     total = diagnosis_count[diagnosis]
     for symptom, count in symp_freq.items():
@@ -133,7 +126,6 @@ for diagnosis, symp_freq in co_occurrence.items():
         elif G.has_node(diagnosis):
             G.add_edge(diagnosis, symptom, weight=alpha_ij, edge_type="frequency")
 
-# Перевірка
 example = list(conditions.keys())[0]
 top5 = sorted(G[example].items(), key=lambda x: x[1]["weight"], reverse=True)[:5]
 print(f"\nТоп-5 для '{example}':")
@@ -143,7 +135,6 @@ for symp, data in top5:
 max_w = max(data["weight"] for _, _, data in G.edges(data=True))
 print(f"\nМакс. вага в графі: {max_w:.3f}  (має бути ≤ 1.0)")
 
-# КЛІТИНКА 6: Векторизація всіх вузлів графа
 all_nodes    = diagnoses + symptoms
 node_vectors = {}
 
@@ -152,9 +143,8 @@ print(f"Векторизація {len(all_nodes)} вузлів...")
 for node_name in tqdm(all_nodes):
     node_vectors[node_name] = encode_text(node_name)
 
-print(f"✅ Векторизовано: {len(node_vectors)} вузлів")
+print(f"Векторизовано: {len(node_vectors)} вузлів")
 
-# КЛІТИНКА 7: Збереження матриць + нормалізація
 diagnosis_matrix = normalize(np.stack([node_vectors[d] for d in diagnoses]))
 symptom_matrix   = normalize(np.stack([node_vectors[s] for s in symptoms]))
 
@@ -164,11 +154,10 @@ np.save("symptom_vectors.npy",   symptom_matrix)
 with open("node_vectors.pkl", "wb") as f:
     pickle.dump(node_vectors, f)
 
-print(f"✅ diagnosis_vectors.npy  →  shape: {diagnosis_matrix.shape}")
-print(f"✅ symptom_vectors.npy    →  shape: {symptom_matrix.shape}")
-print(f"✅ node_vectors.pkl збережено")
+print(f"diagnosis_vectors.npy  →  shape: {diagnosis_matrix.shape}")
+print(f"symptom_vectors.npy    →  shape: {symptom_matrix.shape}")
+print(f"node_vectors.pkl збережено")
 
-# КЛІТИНКА 8: Виправлений пошук — за назвами вузлів
 print("Будуємо індекс назв вузлів...")
 
 symptom_name_vectors = {}
@@ -180,9 +169,8 @@ symptom_name_matrix = normalize(
 )
 
 np.save("symptom_name_vectors.npy", symptom_name_matrix)
-print(f"✅ symptom_name_vectors.npy  →  shape: {symptom_name_matrix.shape}")
+print(f"symptom_name_vectors.npy  →  shape: {symptom_name_matrix.shape}")
 
-# КЛІТИНКА 9: Виправлена матриця суміжності + збереження графа
 adj_matrix = np.zeros((len(diagnoses), len(symptoms)))
 for i, diag in enumerate(diagnoses):
     for j, symp in enumerate(symptoms):
@@ -194,11 +182,10 @@ np.save("adjacency_matrix.npy", adj_matrix)
 with open("knowledge_graph.pkl", "wb") as f:
     pickle.dump(G, f)
 
-print(f"✅ adjacency_matrix.npy  →  shape: {adj_matrix.shape}")
+print(f"   adjacency_matrix.npy  →  shape: {adj_matrix.shape}")
 print(f"   max α = {adj_matrix.max():.3f}  (має бути ≤ 1.0)")
-print(f"✅ knowledge_graph.pkl оновлено")
+print(f"   knowledge_graph.pkl оновлено")
 
-# КЛІТИНКА 10: Функція пошуку + фінальний тест
 def find_similar_nodes(query: str, top_k: int = 5) -> list:
     eng = translate_to_english(query)
     vec = normalize(encode_text(eng).reshape(1, -1))
@@ -224,5 +211,3 @@ for q in test_queries:
     for node, score in results:
         bar = "█" * int(score * 20)
         print(f"  {score:.3f} {bar}  →  {node}")
-
-print("\n🎉 step2_biobert.py повністю завершено!")
