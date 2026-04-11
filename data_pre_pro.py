@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from collections import defaultdict
 import ast
 import os
+import pickle
 
 DATA_DIR = "Dataset/"
 
@@ -174,3 +175,8 @@ plt.show()
 
 print("\n🎉 Крок 1 повністю завершено!")
 print("Наступний крок → завантаження BioBERT та векторизація вузлів графа")
+
+with open("knowledge_graph.pkl", "wb") as f:
+    pickle.dump(G, f)
+
+print("knowledge_graph.pkl збережено")
