@@ -10,7 +10,6 @@ _device = None
 _embed_cache = {}
 
 def embed_action(action: str) -> np.ndarray:
-    """Перекладає текст та створює нормалізований ембединг."""
     if action not in _embed_cache:
         eng = translate_to_english(action)
         _embed_cache[action] = normalize_vec(encode_text(eng))

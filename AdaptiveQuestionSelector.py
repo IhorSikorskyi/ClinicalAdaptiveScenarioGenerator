@@ -67,10 +67,6 @@ class AdaptiveQuestionSelector:
         return self._embed_cache[q]
 
     def select_best(self, step: int, initial_complaint_vec=None) -> tuple:
-        """
-        Обирає найкращу дію (питання або тест) на основі максимізації Information Gain.
-        initial_complaint_vec: вектор початкової скарги для підсилення медичної релевантності.
-        """
         tau = self.tau_fn(step)
         current_activations = self.model.get_diagnosis_activations()
         H_before = shannon_entropy(compute_probabilities(current_activations, tau))
@@ -81,7 +77,6 @@ class AdaptiveQuestionSelector:
 
         snap = self.model.snapshot()
 
-        # Створюємо пул доступних дій
         pool = [(q, "question") for q in self.CANDIDATE_QUESTIONS if q not in self.asked]
         pool += [(p, "test") for p in self.procedures if p not in self.asked]
 
@@ -89,29 +84,20 @@ class AdaptiveQuestionSelector:
             return None, 0.0, None
 
         for action, a_type in pool:
-            # Отримуємо вектор дії
             a_vec = embed_action(action)
 
-            # Симулюємо оновлення стану для розрахунку IG
             self.model.update_state(a_vec, revealed_symptoms=None)
             H_after = shannon_entropy(compute_probabilities(self.model.get_diagnosis_activations(), tau))
             ig = H_before - H_after
 
-            # Повертаємо модель до початкового стану кроку
             self.model.restore(snap)
 
-            # --- МЕДИЧНА ПРІОРИТЕТИЗАЦІЯ ---
-
-            # 1. Штраф за тип дії (тести дорожчі за питання)
             if a_type == "test":
-                ig -= 0.05  # Тести вимагають значно більшого IG, щоб бути обраними
+                ig -= 0.05
 
-            # 2. Бонус за релевантність до скарги (Focus Bonus)
             if initial_complaint_vec is not None:
-                # Чим ближче питання до скарги тематично, тим вищий пріоритет
                 relevance = float(cosine_similarity(a_vec.reshape(1, -1),
                                                     initial_complaint_vec.reshape(1, -1))[0][0])
-                # Додаємо до 10% бонусу від максимально можливої релевантності
                 ig += (relevance * 0.1)
 
             if ig > best_ig:
@@ -119,7 +105,6 @@ class AdaptiveQuestionSelector:
                 best_action = action
                 best_type = a_type
 
-        # Запасний варіант, якщо IG скрізь нульовий
         if best_action is None and pool:
             best_action, best_type = pool[0]
             best_ig = 0.0

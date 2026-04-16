@@ -6,7 +6,6 @@ from UtilsBert import encode_text, normalize_vec, translate_to_english
 
 
 class VirtualPatient:
-    # Слова-маркери для демографічних питань
     _DEMO_WORDS = {
         "age", "old", "young", "year", "male", "female",
         "man", "woman", "gender", "sex", "boy", "girl",
@@ -22,25 +21,19 @@ class VirtualPatient:
         self.sim_threshold = similarity_threshold
         self.max_reveal = max_reveal_per_question
 
-        # 1. Вибір випадкового пацієнта
         row = df.sample(1).iloc[0]
         self.true_diagnosis = row["PATHOLOGY"]
         self.age = int(row["AGE"]) if "AGE" in row.index and pd.notna(row["AGE"]) else None
         self.sex = str(row["SEX"]).strip() if "SEX" in row.index and pd.notna(row["SEX"]) else None
 
-        # 2. ПАРСИНГ КОДІВ СИМПТОМІВ (Спочатку створюємо base_codes)
         evid_list = ast.literal_eval(row["EVIDENCES"])
         base_codes = list({ev.split("_@_")[0] for ev in evid_list})
 
-        # 3. МАПІНГ КОДІВ У ТЕКСТОВІ НАЗВИ
         self.patient_symptoms = {}
         for code in base_codes:
-            # Використовуємо очищену назву зі словника Preprocessing
-            # Якщо коду немає в словнику, залишаємо сам код як запасний варіант
             name = symptom_names_dict.get(code, code)
             self.patient_symptoms[name] = False
 
-        # 4. ВІДКРИТТЯ ПОЧАТКОВИХ СКАРГ
         all_s = list(self.patient_symptoms.keys())
         n_reveal = max(2, int(len(all_s) * reveal_ratio))
         for s in random.sample(all_s, n_reveal):
@@ -50,11 +43,9 @@ class VirtualPatient:
         self.hidden_symptoms = [s for s, v in self.patient_symptoms.items() if not v]
 
     def _is_demographic(self, question: str) -> bool:
-        """Перевіряє, чи є питання демографічним."""
         return bool(set(question.lower().split()) & self._DEMO_WORDS)
 
     def _answer_demographic(self, question: str) -> tuple:
-        """Логіка відповіді на питання про вік/стать."""
         q = question.lower()
         if self.age is not None and any(w in q for w in ("age", "old", "year")):
             return f"I am {self.age} years old.", []
@@ -65,7 +56,6 @@ class VirtualPatient:
         return "I cannot provide that information.", []
 
     def answer_question(self, question: str) -> tuple:
-        """Головний метод обробки питання до пацієнта."""
         if question is None or not str(question).strip():
             return "I have nothing more to say.", []
 
@@ -74,7 +64,6 @@ class VirtualPatient:
 
         q_vec = normalize_vec(encode_text(translate_to_english(question)))
 
-        # Перевірка серед вже ВІДКРИТИХ симптомів (уникнення дублів)
         confirmed = []
         for symp in self.revealed_symptoms:
             s_vec = normalize_vec(encode_text(symp))
@@ -85,7 +74,6 @@ class VirtualPatient:
         if confirmed:
             return f'Yes, we already discussed that: {", ".join(confirmed)}', []
 
-        # Пошук серед ПРИХОВАНИХ симптомів
         candidates = []
         for symp in list(self.hidden_symptoms):
             s_vec = normalize_vec(encode_text(symp))
@@ -125,7 +113,6 @@ class VirtualPatient:
         }
 
     def perform_test(self, test_query: str, procedures_list: list, diagnosis_tests: dict) -> str:
-        """Виконання аналізів."""
         if not test_query:
             return "Please specify which test you want to perform."
 

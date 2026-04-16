@@ -9,16 +9,13 @@ from sklearn.metrics.pairwise import cosine_similarity
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 
-# ── Конфігурація ──────────────────────────────────────────────────────────────
 MODEL_NAME = "dmis-lab/biobert-base-cased-v1.2"
 DATA_DIR   = "Dataset/"
-SAVE_DIR   = "DataSaves/"  # Папка з артефактами зі Step 1
+SAVE_DIR   = "DataSaves/"
 
-# Перевірка наявності папки
 if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
 
-# ── 1. Завантаження артефактів зі Step 1 ─────────────────────────────────────
 def load_artifacts():
     # Читаємо файли з SAVE_DIR
     with open(os.path.join(SAVE_DIR, "knowledge_graph.pkl"), "rb") as f:
@@ -30,7 +27,6 @@ def load_artifacts():
     with open(os.path.join(SAVE_DIR, "diagnosis_tests.json"), "r", encoding="utf-8") as f:
         diagnosis_tests = json.load(f)
 
-    # Датасет залишається в DATA_DIR
     train_path = os.path.join(DATA_DIR, "release_train_patients")
     df = pd.read_csv(train_path + ".csv" if os.path.exists(train_path + ".csv") else train_path)
 
@@ -44,7 +40,6 @@ def load_artifacts():
     return (G, metadata, diagnosis_tests, symptom_names, procedure_codes,
             df, diagnoses, symptoms, procedures)
 
-# ── 2. Ініціалізація BioBERT ──────────────────────────────────────────────────
 def load_biobert():
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     model     = AutoModel.from_pretrained(MODEL_NAME)
@@ -54,7 +49,6 @@ def load_biobert():
     print(f"   \nBioBERT завантажено на: {device}")
     return tokenizer, model, device
 
-# ── 3. Допоміжні функції ──────────────────────────────────────────────────────
 def make_encoder(tokenizer, model, device):
     def encode_text(text: str) -> np.ndarray:
         inputs = tokenizer(text, return_tensors="pt", truncation=True,
@@ -78,7 +72,6 @@ def translate_to_english(text: str) -> str:
     except Exception as e:
         return text
 
-# ── 4. Векторизація всіх вузлів ───────────────────────────────────────────────
 def vectorize_nodes(diagnoses, symptoms, encode_text):
     all_nodes = diagnoses + symptoms
     node_vectors = {}
@@ -87,12 +80,10 @@ def vectorize_nodes(diagnoses, symptoms, encode_text):
         node_vectors[node_name] = encode_text(node_name)
     return node_vectors
 
-# ── 5. Збереження векторних артефактів (в SAVE_DIR) ───────────────────────────
 def save_vector_artifacts(G, node_vectors, diagnoses, symptoms, procedures):
     diagnosis_matrix = normalize(np.stack([node_vectors[d] for d in diagnoses]))
     symptom_matrix   = normalize(np.stack([node_vectors[s] for s in symptoms]))
 
-    # Збереження матриць
     np.save(os.path.join(SAVE_DIR, "diagnosis_vectors.npy"), diagnosis_matrix)
     np.save(os.path.join(SAVE_DIR, "symptom_vectors.npy"), symptom_matrix)
 
@@ -107,7 +98,6 @@ def save_vector_artifacts(G, node_vectors, diagnoses, symptoms, procedures):
     with open(os.path.join(SAVE_DIR, "node_vectors.pkl"), "wb") as f:
         pickle.dump(node_vectors, f)
 
-    # Оновлення та збереження матриці суміжності
     adj_matrix = np.zeros((len(diagnoses), len(symptoms)))
     for i, diag in enumerate(diagnoses):
         for j, symp in enumerate(symptoms):
@@ -122,8 +112,6 @@ def save_vector_artifacts(G, node_vectors, diagnoses, symptoms, procedures):
     print(f"\n   --- Векторні артефакти оновлено в {SAVE_DIR} ---")
     return symptom_name_matrix
 
-
-# ── 6. Тест пошуку подібних вузлів ───────────────────────────────────────────
 def test_search(encode_text, symptom_name_matrix, symptoms):
     def find_similar_nodes(query: str, top_k: int = 5) -> list:
         eng = translate_to_english(query)
@@ -138,7 +126,6 @@ def test_search(encode_text, symptom_name_matrix, symptoms):
         results = find_similar_nodes(q, top_k=2)
         print(f"   '{q}' -> найближчий: {results[0][0]} (score: {results[0][1]:.3f})")
 
-# ── Точка входу ───────────────────────────────────────────────────────────────
 def main():
     print("=" * 60)
     print("STEP 2 — Векторизація вузлів графа (BioBERT)")

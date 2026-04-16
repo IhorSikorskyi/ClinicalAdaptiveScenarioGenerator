@@ -8,11 +8,9 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 
-# ── Конфігурація ──────────────────────────────────────────────────────────────
 DATA_DIR = "Dataset/"
 SAVE_DIR = "DataSaves/"
 
-# Створюємо папку, якщо вона не існує
 if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
     print(f"   Створено директорію: {SAVE_DIR}")
@@ -25,7 +23,6 @@ PROCEDURE_KEYWORDS = [
     "swab", "urine", "stool", "smear", "angiography",
 ]
 
-# ── 1. Завантаження даних ─────────────────────────────────────────────────────
 def load_raw_data():
     with open(f"{DATA_DIR}release_conditions.json", "r", encoding="utf-8") as f:
         conditions = json.load(f)
@@ -40,16 +37,13 @@ def load_raw_data():
     print(f"   Пацієнтів: {len(df):,}")
     return conditions, evidences, df
 
-# ── 2. Словник симптомів та процедурних вузлів ────────────────────────────────
 def build_symptom_names(evidences):
     symptom_names = {}
     procedure_codes = set()
 
     for code, info in evidences.items():
-        # Спершу пробуємо взяти зрозумілу назву (name), якщо немає - питання, якщо немає - код
         raw_label = info.get("question_en") or info.get("name") or code
 
-        # Якщо це питання, очищуємо його від стандартних префіксів
         if "?" in raw_label:
             label = (raw_label
                      .replace("Do you have ", "")
@@ -59,12 +53,11 @@ def build_symptom_names(evidences):
                      .replace("Is there ", "")
                      .replace("Do you ", "")
                      .replace("Have you ", "")
-                     .replace("Has your ", "")  # Додано для вашого датасету
+                     .replace("Has your ", "")
                      .replace("?", "")
                      .strip()
                      .capitalize())
         else:
-            # Якщо питання немає, очищуємо код (E_201 -> E 201)
             label = raw_label.replace("_", " ").capitalize()
 
         if len(label) > 60:
@@ -72,7 +65,6 @@ def build_symptom_names(evidences):
 
         symptom_names[code] = label
 
-        # Перевірка на процедурність через питання або назву
         search_text = (info.get("question_en", "") + " " + info.get("name", "")).lower()
         if any(kw in search_text for kw in PROCEDURE_KEYWORDS):
             procedure_codes.add(code)
@@ -80,7 +72,6 @@ def build_symptom_names(evidences):
     print(f"   Словник побудовано: {len(symptom_names)} записів")
     return symptom_names, procedure_codes
 
-# ── 3. Граф знань ─────────────────────────────────────────────────────────────
 def build_graph(conditions, symptom_names, procedure_codes):
     G = nx.Graph()
 
@@ -103,7 +94,6 @@ def build_graph(conditions, symptom_names, procedure_codes):
     print(f"   Граф побудовано: {G.number_of_nodes()} вузлів, {G.number_of_edges()} ребер")
     return G
 
-# ── 4. Ваги α_ij з частот пацієнтів ─────────────────────────────────────────
 def update_graph_weights(G, df, symptom_names, conditions):
     co_occurrence = defaultdict(lambda: defaultdict(int))
     diagnosis_count = defaultdict(int)
@@ -140,7 +130,6 @@ def update_graph_weights(G, df, symptom_names, conditions):
 
     return G
 
-# ── 5. Матриця суміжності та metadata ────────────────────────────────────────
 def build_matrices_and_metadata(G, conditions):
     diagnoses  = [n for n, d in G.nodes(data=True) if d.get("node_type") == "diagnosis"]
     symptoms   = [n for n, d in G.nodes(data=True)
@@ -163,7 +152,6 @@ def build_matrices_and_metadata(G, conditions):
 
     return diagnoses, symptoms, procedures, adj_matrix, diagnosis_tests
 
-# ── 6. Збереження артефактів (ЗМІНЕНО: тепер в SAVE_DIR) ──────────────────────
 def save_artifacts(G, diagnoses, symptoms, procedures, adj_matrix,
                    diagnosis_tests, symptom_names, procedure_codes):
 
@@ -193,8 +181,6 @@ def save_artifacts(G, diagnoses, symptoms, procedures, adj_matrix,
     print(f"   adjacency_matrix.npy, symptom_names.json, graph_metadata.json,")
     print(f"   diagnosis_tests.json, knowledge_graph.pkl")
 
-
-# ── 7. Візуалізація підграфа (ЗМІНЕНО: тепер в SAVE_DIR) ──────────────────────
 def visualize_sample(G, conditions):
     example = list(conditions.keys())[0]
     neighbors = list(G.neighbors(example))[:12]
@@ -217,8 +203,6 @@ def visualize_sample(G, conditions):
     plt.show()
     print(f"   graph_sample.png збережено в {SAVE_DIR}")
 
-
-# ── Точка входу ───────────────────────────────────────────────────────────────
 def main():
     print("=" * 60)
     print("STEP 1 — Препроцесинг та побудова графа знань")

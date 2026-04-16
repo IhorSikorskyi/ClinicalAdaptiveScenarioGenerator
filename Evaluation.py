@@ -1,10 +1,7 @@
 import json
-import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
-# Імпортуємо спільну логіку, щоб не дублювати код
-from BaseScoringLogic import compute_probabilities, shannon_entropy, get_tau
-from UtilsBert import embed_action, encode_text
+from UtilsBert import encode_text
 
 
 class EvaluationEngine:

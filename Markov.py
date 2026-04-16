@@ -5,12 +5,11 @@ import random
 import numpy as np
 import pandas as pd
 
-# Імпорт ваших нових модулів
 from BaseScoringLogic import compute_probabilities, shannon_entropy, get_tau
 from VirtualPatient import VirtualPatient
 from PatientModel import PatientModel
 from AdaptiveQuestionSelector import AdaptiveQuestionSelector
-from UtilsBert import embed_action, encode_text, normalize_vec, translate_to_english
+from UtilsBert import embed_action
 from Evaluation import EvaluationEngine
 
 # Конфігурація
@@ -20,14 +19,6 @@ N_STEPS = 12
 
 
 def load_artifacts() -> dict:
-    """
-    Читає всі необхідні артефакти з SAVE_DIR.
-
-    Повертає словник з ключами:
-      diagnoses, symptoms, procedures,
-      adj_matrix, diag_vectors, symp_vectors,
-      diagnosis_tests, df
-    """
     def _path(name):
         return os.path.join(SAVE_DIR, name)
 
@@ -70,10 +61,6 @@ def load_artifacts() -> dict:
 
 
 def run_test_session(virtual_patient, patient_model, selector, diagnoses, arts, n_steps=N_STEPS):
-    """
-    Проводить симуляцію діагностичної сесії з розширеним логуванням та оцінюванням метрик.
-    """
-    # Ініціалізація двигуна оцінювання
     engine = EvaluationEngine()
 
     status_init = virtual_patient.get_status()
@@ -98,31 +85,26 @@ def run_test_session(virtual_patient, patient_model, selector, diagnoses, arts, 
     complaint_vec = embed_action(complaint_text)
 
     for step in range(1, n_steps + 1):
-        # 1. Вибір дії селектором
         best_act, pred_ig, act_type = selector.select_best(step, initial_complaint_vec=complaint_vec)
         if best_act is None:
             break
 
-        # 2. Отримання відповіді від віртуального пацієнта
         if act_type == "test":
             answer = virtual_patient.perform_test(best_act, arts["procedures"], arts["diagnosis_tests"])
             newly_revealed = []
         else:
             answer, newly_revealed = virtual_patient.answer_question(best_act)
 
-        # 3. Оновлення внутрішньої моделі
         a_vec = embed_action(best_act)
         revealed_names = [s for s, _ in newly_revealed]
         patient_model.update_state(a_vec, revealed_symptoms=revealed_names)
 
-        # 4. Розрахунок математичних метрик (IG)
         tau = get_tau(step)
         diag_act = patient_model.get_diagnosis_activations()
         probs = compute_probabilities(diag_act, tau=tau)
         H_new = shannon_entropy(probs)
         dH = H_prev - H_new
 
-        # 5. Розрахунок експертних метрик через EvaluationEngine
         step_metrics = engine.calculate_step_metrics(
             action_text=best_act,
             true_diagnosis=status_init["true_diagnosis"],
@@ -131,10 +113,9 @@ def run_test_session(virtual_patient, patient_model, selector, diagnoses, arts, 
 
         true_rank = (np.argsort(probs)[::-1].tolist().index(true_idx) + 1 if true_idx >= 0 else -1)
 
-        # Зберігаємо розширену історію
         history.append({
             "step": step,
-            "query": best_act,  # для звіту Evaluation
+            "query": best_act,
             "action": best_act,
             "type": act_type,
             "ig": dH,
@@ -148,8 +129,6 @@ def run_test_session(virtual_patient, patient_model, selector, diagnoses, arts, 
 
         H_prev = H_new
 
-    # Виклик генерації фінального звіту за результатами сесії
-    # Передаємо в якості user_diagnosis топ-1 результат моделі
     final_top_diag = diagnoses[np.argsort(probs)[::-1][0]]
 
     engine.generate_session_report(
@@ -159,14 +138,10 @@ def run_test_session(virtual_patient, patient_model, selector, diagnoses, arts, 
     )
 
 def run_session(virtual_patient, patient_model, diagnoses, arts):
-    """
-    Інтерактивний режим екзамену з оцінюванням дій у реальному часі.
-    """
-    engine = EvaluationEngine()  # Ініціалізація системи оцінювання
+    engine = EvaluationEngine()
     status_init = virtual_patient.get_status()
     session_log = []
 
-    # Початковий стан ентропії
     tau_0 = get_tau(0)
     h_prev = shannon_entropy(compute_probabilities(patient_model.get_diagnosis_activations(), tau_0))
 
@@ -181,12 +156,10 @@ def run_session(virtual_patient, patient_model, diagnoses, arts):
         if not user_input: continue
         if user_input.upper() == "DIAGNOSIS": break
 
-        # Визначаємо тип дії
         is_test = user_input.upper().startswith("TEST")
         action_query = user_input[5:].strip() if is_test else user_input
         action_type = "test" if is_test else "question"
 
-        # 1. Отримуємо відповідь від пацієнта
         if is_test:
             answer = virtual_patient.perform_test(action_query, arts["procedures"], arts["diagnosis_tests"])
             newly_revealed = []
@@ -195,7 +168,6 @@ def run_session(virtual_patient, patient_model, diagnoses, arts):
             answer, newly_revealed = virtual_patient.answer_question(action_query)
             print(f"Пацієнт: {answer}")
 
-        # 2. Математичне оновлення моделі та розрахунок IG
         a_vec = embed_action(user_input)
         revealed_names = [s for s, _ in newly_revealed]
 
@@ -203,10 +175,9 @@ def run_session(virtual_patient, patient_model, diagnoses, arts):
 
         tau = get_tau(step)
         h_new = shannon_entropy(compute_probabilities(patient_model.get_diagnosis_activations(), tau))
-        ig = h_prev - h_new  # Розрахунок Information Gain
+        ig = h_prev - h_new
         h_prev = h_new
 
-        # 3. Логування кроку для системи оцінювання
         session_log.append({
             "step": step,
             "type": action_type,
@@ -215,10 +186,8 @@ def run_session(virtual_patient, patient_model, diagnoses, arts):
         })
         step += 1
 
-    # Завершення: Введення діагнозу та генерація звіту
     user_diag = input("\nВаш остаточний діагноз: ").strip()
 
-    # Виклик оновленої системи оцінювання
     engine.generate_session_report(
         session_log=session_log,
         true_diagnosis=status_init['true_diagnosis'],
@@ -252,16 +221,12 @@ def main():
         similarity_threshold=0.80
     )
 
-    # ПЕРЕДАЄМО arts["procedures"] у селектор
     selector = AdaptiveQuestionSelector(pm, get_tau, procedures=arts["procedures"])
 
-    # ПЕРЕДАЄМО arts у сесію для доступу до списку процедур
     run_test_session(vp, pm, selector, arts["diagnoses"], arts, n_steps=N_STEPS)
 
-    # ПЕРЕДАЄМО arts як четвертий аргумент
     # run_session(vp, pm, arts["diagnoses"], arts)
 
-    # Збереження (можна винести в окрему функцію)
     with open(os.path.join(SAVE_DIR, "patient_model_class.pkl"), "wb") as f:
         pickle.dump(pm, f)
 
