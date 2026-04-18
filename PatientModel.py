@@ -44,14 +44,16 @@ class PatientModel:
 
         multiplier = 1.0 if (revealed_symptoms and len(revealed_symptoms) > 0) else 0.3
 
-        self.symp_scores = self.decay * self.symp_scores + (self.beta * sparse_symp * multiplier)
+        raw_symp = self.decay * self.symp_scores + (self.beta * sparse_symp * multiplier)
+        self.symp_scores = np.tanh(raw_symp)
 
         diagnosis_from_symptoms = self.adj_matrix @ self.symp_scores
         direct_diagnosis_sim = cosine_similarity(action_vector.reshape(1, -1), self.diag_vectors)[0]
 
-        self.diag_scores = (self.decay * self.diag_scores +
-                            0.8 * diagnosis_from_symptoms +
-                            0.2 * self.beta * direct_diagnosis_sim)
+        raw_diag = (self.decay * self.diag_scores +
+                    0.8 * diagnosis_from_symptoms +
+                    0.2 * self.beta * direct_diagnosis_sim)
+        self.diag_scores = np.tanh(raw_diag)
 
         return np.concatenate([self.diag_scores, self.symp_scores])
 

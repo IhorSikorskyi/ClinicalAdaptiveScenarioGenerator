@@ -39,12 +39,15 @@ def load_raw_data():
 
 def build_symptom_names(evidences):
     symptom_names = {}
+    symptom_questions = {}
     procedure_codes = set()
 
     for code, info in evidences.items():
         raw_label = info.get("question_en") or info.get("name") or code
 
         if "?" in raw_label:
+            symptom_questions[code] = raw_label.strip()
+
             label = (raw_label
                      .replace("Do you have ", "")
                      .replace("Have you had ", "")
@@ -70,7 +73,8 @@ def build_symptom_names(evidences):
             procedure_codes.add(code)
 
     print(f"   Словник побудовано: {len(symptom_names)} записів")
-    return symptom_names, procedure_codes
+    print(f"   Питань для селектора: {len(symptom_questions)}")
+    return symptom_names, symptom_questions, procedure_codes
 
 def build_graph(conditions, symptom_names, procedure_codes):
     G = nx.Graph()
@@ -153,12 +157,15 @@ def build_matrices_and_metadata(G, conditions):
     return diagnoses, symptoms, procedures, adj_matrix, diagnosis_tests
 
 def save_artifacts(G, diagnoses, symptoms, procedures, adj_matrix,
-                   diagnosis_tests, symptom_names, procedure_codes):
+                   diagnosis_tests, symptom_names, symptom_questions, procedure_codes):
 
     np.save(os.path.join(SAVE_DIR, "adjacency_matrix.npy"), adj_matrix)
 
     with open(os.path.join(SAVE_DIR, "symptom_names.json"), "w", encoding="utf-8") as f:
         json.dump(symptom_names, f, ensure_ascii=False, indent=2)
+
+    with open(os.path.join(SAVE_DIR, "symptom_questions.json"), "w", encoding="utf-8") as f:
+        json.dump(symptom_questions, f, ensure_ascii=False, indent=2)
 
     with open(os.path.join(SAVE_DIR, "graph_metadata.json"), "w", encoding="utf-8") as f:
         json.dump(
@@ -178,8 +185,8 @@ def save_artifacts(G, diagnoses, symptoms, procedures, adj_matrix,
         pickle.dump(G, f)
 
     print(f"\n   --- Артефакти збережено в {SAVE_DIR} ---")
-    print(f"   adjacency_matrix.npy, symptom_names.json, graph_metadata.json,")
-    print(f"   diagnosis_tests.json, knowledge_graph.pkl")
+    print(f"   adjacency_matrix.npy, symptom_names.json, symptom_questions.json,")
+    print(f"   graph_metadata.json, diagnosis_tests.json, knowledge_graph.pkl")
 
 def visualize_sample(G, conditions):
     example = list(conditions.keys())[0]
@@ -209,19 +216,18 @@ def main():
     print("=" * 60)
 
     conditions, evidences, df = load_raw_data()
-    symptom_names, procedure_codes = build_symptom_names(evidences)
+    symptom_names, symptom_questions, procedure_codes = build_symptom_names(evidences)
     G = build_graph(conditions, symptom_names, procedure_codes)
     G = update_graph_weights(G, df, symptom_names, conditions)
     diagnoses, symptoms, procedures, adj_matrix, diagnosis_tests = \
         build_matrices_and_metadata(G, conditions)
 
     save_artifacts(G, diagnoses, symptoms, procedures, adj_matrix,
-                   diagnosis_tests, symptom_names, procedure_codes)
+                   diagnosis_tests, symptom_names, symptom_questions, procedure_codes)
 
     visualize_sample(G, conditions)
 
     print("\nStep 1 завершено успішно.")
-
 
 if __name__ == "__main__":
     main()

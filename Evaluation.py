@@ -3,15 +3,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from UtilsBert import encode_text
 
-
 class EvaluationEngine:
-    """
-    Система оцінювання дій користувача (студента).
-    Реалізує розрахунок семантичної відповідності (R), штрафів (Penalty)
-    та підсумкового балу за крок.
-    """
-
-    # Дефолтні протоколи (можна розширювати або завантажувати через from_json)
     DEFAULT_PROTOCOLS = {
         "Localized edema": {
             "gold_standard": [
@@ -41,11 +33,6 @@ class EvaluationEngine:
     def __init__(self, protocols: dict = None,
                  w1: float = 0.6, w2: float = 0.4,
                  w_side: float = 1.5, penalty_threshold: float = 0.82):
-        """
-        w1 — вага для ΔH (діагностична корисність)
-        w2 — вага для R (відповідність протоколу)
-        w_side — множник штрафу
-        """
         self.w1 = w1
         self.w2 = w2
         self.w_side = w_side
@@ -56,7 +43,6 @@ class EvaluationEngine:
         print(f"EvaluationEngine: векторизовано протоколи для {len(self.eval_data)} діагнозів")
 
     def _vectorize_protocols(self, protocols: dict) -> dict:
-        """Перетворює текстові протоколи у вектори BioBERT."""
         result = {}
         for diagnosis, data in protocols.items():
             result[diagnosis] = {
@@ -68,14 +54,9 @@ class EvaluationEngine:
     def calculate_step_metrics(self, action_text: str,
                                true_diagnosis: str,
                                delta_h: float) -> dict:
-        """
-        Розрахунок метрик одного кроку:
-        step_score = w1 * ΔH + w2 * R - Penalty
-        """
         v_at = encode_text(action_text)
         protocol = self.eval_data.get(true_diagnosis, {"gold_standard": [], "red_flags": []})
 
-        # R — Семантична коректність (максимальна схожість із золотим стандартом)
         r_score = 0.0
         if protocol["gold_standard"]:
             r_score = max(
@@ -83,7 +64,6 @@ class EvaluationEngine:
                 for v in protocol["gold_standard"]
             )
 
-        # Penalty — Штраф за небезпечні дії (Red Flags)
         penalty = 0.0
         if protocol["red_flags"]:
             max_p = max(
@@ -93,7 +73,6 @@ class EvaluationEngine:
             if max_p > self.penalty_threshold:
                 penalty = self.w_side * max_p
 
-        # Фінальний бал за крок
         step_score = self.w1 * delta_h + self.w2 * r_score - penalty
 
         return {
@@ -103,9 +82,6 @@ class EvaluationEngine:
         }
 
     def generate_session_report(self, session_log: list, true_diagnosis: str, user_diagnosis: str):
-        """
-        Генерує розгорнутий текстовий звіт за результатами всієї сесії.
-        """
         print("\n" + "═" * 70)
         print(f"{'ФІНАЛЬНИЙ ЗВІТ ПРО КОМПЕТЕНЦІЇ':^70}")
         print("═" * 70)
@@ -122,7 +98,6 @@ class EvaluationEngine:
         critical_errors = 0
 
         for entry in session_log:
-            # Використовуємо вже розрахований IG (delta_h) з Markov.py
             m = self.calculate_step_metrics(entry['query'], true_diagnosis, entry.get('ig', 0))
 
             total_score += m['total_step']

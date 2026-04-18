@@ -17,7 +17,6 @@ if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
 
 def load_artifacts():
-    # Читаємо файли з SAVE_DIR
     with open(os.path.join(SAVE_DIR, "knowledge_graph.pkl"), "rb") as f:
         G = pickle.load(f)
     with open(os.path.join(SAVE_DIR, "graph_metadata.json"), "r", encoding="utf-8") as f:
@@ -58,12 +57,10 @@ def make_encoder(tokenizer, model, device):
         return outputs.last_hidden_state[:, 0, :].cpu().numpy().squeeze()
     return encode_text
 
-
 def normalize(matrix: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     norms[norms == 0] = 1
     return matrix / norms
-
 
 def translate_to_english(text: str) -> str:
     try:
@@ -105,7 +102,6 @@ def save_vector_artifacts(G, node_vectors, diagnoses, symptoms, procedures):
                 adj_matrix[i][j] = G[diag][symp]["weight"]
     np.save(os.path.join(SAVE_DIR, "adjacency_matrix.npy"), adj_matrix)
 
-    # Оновлення самого графа (з новими вагами, якщо вони мінялися)
     with open(os.path.join(SAVE_DIR, "knowledge_graph.pkl"), "wb") as f:
         pickle.dump(G, f)
 
