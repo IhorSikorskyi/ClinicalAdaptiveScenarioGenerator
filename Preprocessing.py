@@ -186,7 +186,7 @@ def save_artifacts(G, diagnoses, symptoms, procedures, adj_matrix,
 
     print(f"\n   --- Артефакти збережено в {SAVE_DIR} ---")
     print(f"   adjacency_matrix.npy, symptom_names.json, symptom_questions.json,")
-    print(f"   graph_metadata.json, diagnosis_tests.json, knowledge_graph.pkl")
+    print(f"   graph_metadata.json, diagnosis_tests.json, knowledge_graph.pkl,")
 
 def visualize_sample(G, conditions):
     example = list(conditions.keys())[0]
@@ -208,11 +208,11 @@ def visualize_sample(G, conditions):
     save_path = os.path.join(SAVE_DIR, "graph_sample.png")
     fig.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.show()
-    print(f"   graph_sample.png збережено в {SAVE_DIR}")
+    print(f"   graph_sample.png")
 
 def main():
     print("=" * 60)
-    print("STEP 1 — Препроцесинг та побудова графа знань")
+    print("Обробка даних та побудова графа знань")
     print("=" * 60)
 
     conditions, evidences, df = load_raw_data()
@@ -226,8 +226,6 @@ def main():
                    diagnosis_tests, symptom_names, symptom_questions, procedure_codes)
 
     visualize_sample(G, conditions)
-
-    print("\nStep 1 завершено успішно.")
 
 if __name__ == "__main__":
     main()

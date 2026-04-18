@@ -104,8 +104,6 @@ def save_vector_artifacts(G, node_vectors, diagnoses, symptoms, procedures):
 
     with open(os.path.join(SAVE_DIR, "knowledge_graph.pkl"), "wb") as f:
         pickle.dump(G, f)
-
-    print(f"\n   --- Векторні артефакти оновлено в {SAVE_DIR} ---")
     return symptom_name_matrix
 
 def test_search(encode_text, symptom_name_matrix, symptoms):
@@ -124,7 +122,7 @@ def test_search(encode_text, symptom_name_matrix, symptoms):
 
 def main():
     print("=" * 60)
-    print("STEP 2 — Векторизація вузлів графа (BioBERT)")
+    print("Векторизація вузлів графа")
     print("=" * 60)
 
     (G, metadata, diagnosis_tests, symptom_names, procedure_codes,
@@ -140,8 +138,6 @@ def main():
     )
 
     test_search(encode_text, symptom_name_matrix, symptoms)
-
-    print(f"\nStep 2 завершено. Всі результати в {SAVE_DIR}")
 
 if __name__ == "__main__":
     main()

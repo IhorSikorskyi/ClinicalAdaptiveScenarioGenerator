@@ -13,6 +13,7 @@ from UtilsBert import embed_action
 from Evaluation import EvaluationEngine
 from SmartVirtualPatient import SmartVirtualPatient
 from VirtualPatientEngine import VirtualPatientEngine
+# from SessionMDP import SessionMDP
 
 DATA_DIR = "Dataset/"
 SAVE_DIR = "DataSaves/"
@@ -237,7 +238,7 @@ def run_session(virtual_patient, patient_model, diagnoses, arts):
     h_prev = shannon_entropy(compute_probabilities(patient_model.get_diagnosis_activations(), tau_0))
 
     print("\n" + "═" * 65)
-    print("РАБОТА З ПАЦІЄНТОМ (ЕКЗАМЕН З ОЦІНЮВАННЯМ)")
+    print("РОБОТА З ПАЦІЄНТОМ (ЕКЗАМЕН З ОЦІНЮВАННЯМ)")
     print(f"Скарги пацієнта: {virtual_patient.get_initial_complaint()}")
     print("═" * 65)
 
