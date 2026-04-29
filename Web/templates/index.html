@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>DS·Train — Virtual Patient Diagnostic System</title>
+
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono&family=DM+Sans&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+
+<body>
+
+<!-- ══ SPLASH SCREEN ══════════════════════════════════════════════════════ -->
+<div id="splash">
+  <div class="logo-block">
+    <div class="logo-title">DS·Train</div>
+    <div class="logo-sub">Virtual Patient Diagnostic System</div>
+  </div>
+
+  <div class="mode-cards">
+    <div class="mode-card active" id="card-smart" onclick="selectMode('smart')">
+      <div class="mode-icon">🧠</div>
+      <div class="mode-name">Smart Patient</div>
+      <div class="mode-desc" id="mode-smart-desc"></div>
+    </div>
+    <div class="mode-card" id="card-simple" onclick="selectMode('simple')">
+      <div class="mode-icon">🔬</div>
+      <div class="mode-name">Simple Patient</div>
+      <div class="mode-desc" id="mode-simple-desc"></div>
+    </div>
+  </div>
+
+  <div class="lang-section">
+    <div class="lang-label" id="lang-label-text"></div>
+    <div class="lang-toggle">
+      <button id="btn-lang-uk" class="lang-btn active" onclick="selectLang('uk')">Українська</button>
+      <button id="btn-lang-en" class="lang-btn" onclick="selectLang('en')">English</button>
+    </div>
+  </div>
+
+  <div id="load-status"><span id="load-status-init"></span></div>
+
+  <div style="display:flex;gap:16px;align-items:center" id="loading-area">
+    <button class="btn-start" id="btn-start" onclick="startSession()"></button>
+    <div class="loading-dots" id="dots" style="display:none">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MAIN APP ════════════════════════════════════════════════════════════ -->
+<div id="app">
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-brand">DS·Train</div>
+    <div class="topbar-meta">
+      <div class="meta-chip"><div class="dot"></div> <span id="tb-mode">—</span></div>
+      <div class="meta-chip"><span id="tb-step-label"></span> <span id="tb-step">0</span></div>
+      <div class="meta-chip">H = <span id="tb-entropy" style="font-family:var(--font-mono)">—</span></div>
+    </div>
+  </div>
+
+  <div class="main-grid">
+
+    <!-- Left Panel -->
+    <div class="left-panel">
+      <div class="panel-header" id="panel-patient-hdr"></div>
+      <div class="patient-card">
+        <div class="patient-avatar" id="pt-avatar">👤</div>
+        <div class="patient-name" id="pt-name"></div>
+        <div class="patient-meta" id="pt-meta">—</div>
+      </div>
+      <div class="complaint-box">
+        <div class="complaint-label" id="complaint-label-el"></div>
+        <div class="complaint-text" id="pt-complaint">—</div>
+      </div>
+      <div class="entropy-section">
+        <div class="entropy-label-row">
+          <span class="entropy-name" id="entropy-name-el"></span>
+          <span class="entropy-value" id="ent-val">—</span>
+        </div>
+        <div class="entropy-track">
+          <div class="entropy-fill" id="ent-bar" style="width:50%"></div>
+        </div>
+        <div class="delta-h" id="delta-h-row" style="display:none">
+          <span id="dh-icon">↓</span>
+          <span id="dh-val" style="font-family:var(--font-mono)">0.0000</span>
+          <span id="dh-label" style="color:var(--text-muted)"></span>
+        </div>
+      </div>
+      <div class="panel-header" id="panel-symptoms-hdr"></div>
+      <div class="symptoms-scroll" id="symptoms-list">
+        <div id="no-symptoms-ph"></div>
+      </div>
+    </div>
+
+    <!-- Chat Panel -->
+    <div class="chat-panel">
+      <div class="chat-messages" id="chat-messages">
+        <!-- messages go here -->
+      </div>
+
+      <div class="input-area">
+        <div class="input-row">
+          <textarea class="input-field" id="user-input" rows="1"
+            placeholder=""
+            onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          <div class="btn-group">
+            <button class="btn btn-primary" id="btn-ask" onclick="sendQuestion()"></button>
+            <button class="btn btn-test" id="btn-test" onclick="openTestDialog()">🔬 Тест <span id="test-counter" class="test-counter">0/3</span></button>
+          </div>
+        </div>
+        <div class="action-chips">
+          <div class="chip" onclick="fillInput('Do you have chest pain?')" id="chip-chest"></div>
+          <div class="chip" onclick="fillInput('Do you have shortness of breath?')" id="chip-breath"></div>
+          <div class="chip" onclick="fillInput('Do you have fever?')" id="chip-fever"></div>
+          <div class="chip" onclick="fillInput('Do you have fatigue?')" id="chip-fatigue"></div>
+          <div class="chip" onclick="fillInput('Are you taking any medications?')" id="chip-meds"></div>
+          <div class="chip" onclick="openDiagDialog()" id="chip-diagnose" style="color:var(--red);border-color:rgba(249,107,107,.3)"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Panel — Hints -->
+    <div class="right-panel" id="hints-panel">
+      <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">
+        <span id="hints-panel-title"></span>
+        <span class="hints-badge" id="hints-badge" style="display:none"></span>
+      </div>
+
+      <div class="hints-lock" id="hints-lock">
+        <div class="hints-lock-icon">🔒</div>
+        <div class="hints-lock-title" id="hints-lock-title-el"></div>
+        <div class="hints-lock-sub"><span id="hints-lock-sub-1"></span> <strong id="hints-steps-left">—</strong> <span id="hints-lock-sub-2"></span></div>
+        <div class="hints-progress-track">
+          <div class="hints-progress-fill" id="hints-progress-fill" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div class="hints-content" id="hints-content" style="display:none">
+        <div class="hints-intro" id="hints-intro-el"></div>
+        <div id="hints-list"></div>
+        <button class="btn-refresh-hints" id="hints-refresh-btn" onclick="requestHints()"></button>
+      </div>
+
+      <div class="hints-loading" id="hints-loading" style="display:none">
+        <div class="hints-spinner"></div>
+        <div id="hints-analyzing-el" style="font-size:12px;color:var(--text-muted);margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ DIAGNOSIS DIALOG ════════════════════════════════════════════════════ -->
+<div class="diag-dialog" id="diag-dialog">
+  <div class="diag-dialog-box">
+    <div class="diag-dialog-title" id="diag-dialog-title"></div>
+    <div class="diag-dialog-sub" id="diag-dialog-sub"></div>
+    <div class="diag-input-wrap">
+      <input class="diag-input" id="diag-input" type="text"
+        placeholder=""
+        onkeydown="diagInputKey(event)"
+        oninput="diagInputChange(this.value)"
+        autocomplete="off">
+      <div class="diag-suggestions" id="diag-suggestions"></div>
+    </div>
+    <div class="diag-btn-row">
+      <button class="btn-cancel" id="btn-cancel-diag" onclick="closeDiagDialog()"></button>
+      <button class="btn-confirm" id="btn-confirm-diag" onclick="confirmDiagnosis()"></button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ REPORT MODAL ════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="report-modal">
+  <div class="modal">
+    <div class="modal-title" id="report-modal-title"></div>
+    <div class="modal-subtitle" id="report-modal-sub"></div>
+    <div id="report-content"></div>
+    <button class="btn-new-session" id="btn-new-session" onclick="location.reload()"></button>
+  </div>
+</div>
+
+<!-- ══ TEST DIALOG ══════════════════════════════════════════════════════════ -->
+<div class="test-dialog" id="test-dialog">
+  <div class="test-dialog-box">
+    <div class="test-dialog-header">
+      <div class="test-dialog-title" id="test-dialog-title"></div>
+      <div class="test-dialog-sub" id="test-dialog-sub"></div>
+    </div>
+
+    <div class="test-input-wrap">
+      <input class="test-search-input" id="test-search-input" type="text"
+        placeholder=""
+        oninput="filterTests(this.value)"
+        onkeydown="testInputKey(event)"
+        autocomplete="off">
+    </div>
+
+    <div class="test-categories" id="test-categories">
+      <!-- populated by JS -->
+    </div>
+
+    <div class="test-selected-row" id="test-selected-row" style="display:none">
+      <span class="test-selected-label" id="test-selected-label-el"></span>
+      <span class="test-selected-name" id="test-selected-name"></span>
+      <button class="test-clear-btn" onclick="clearSelectedTest()">✕</button>
+    </div>
+
+    <div class="test-btn-row">
+      <button class="btn-cancel" id="btn-cancel-test" onclick="closeTestDialog()"></button>
+      <button class="btn-confirm" id="btn-confirm-test" onclick="confirmTest()" disabled><span id="btn-confirm-test-label"></span></button>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

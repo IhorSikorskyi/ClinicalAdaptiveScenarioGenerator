@@ -23,6 +23,11 @@ PROCEDURE_KEYWORDS = [
     "swab", "urine", "stool", "smear", "angiography",
 ]
 
+NOT_SYMPTOMS = {
+    "asthma", "diabetes", "hypertension", "epilepsy", "heart failure",
+    "copd", "cancer", "hiv", "tuberculosis", "hepatitis",
+}
+
 def load_raw_data():
     with open(f"{DATA_DIR}release_conditions.json", "r", encoding="utf-8") as f:
         conditions = json.load(f)
@@ -37,6 +42,33 @@ def load_raw_data():
     print(f"   Пацієнтів: {len(df):,}")
     return conditions, evidences, df
 
+def _clean_symptom_label(raw: str) -> str | None:
+    PREFIXES = [
+        "Do you have ",
+        "Have you had ",
+        "Have you been ",
+        "Have you ",
+        "Has your ",
+        "Are you currently ",
+        "Are you ",
+        "Did you have ",
+        "Did you ",
+        "Is there ",
+        "Is your ",
+        "Do you ",
+    ]
+    label = raw.strip()
+    for prefix in PREFIXES:
+        if label.lower().startswith(prefix.lower()):
+            label = label[len(prefix):]
+            break
+    label = label.replace("?", "").replace(":", "").replace("_", " ").strip()
+    if any(w in label.lower() for w in NOT_SYMPTOMS):
+        return None
+
+    return label[:1].upper() + label[1:] if label else raw
+
+
 def build_symptom_names(evidences):
     symptom_names = {}
     symptom_questions = {}
@@ -48,20 +80,12 @@ def build_symptom_names(evidences):
         if "?" in raw_label:
             symptom_questions[code] = raw_label.strip()
 
-            label = (raw_label
-                     .replace("Do you have ", "")
-                     .replace("Have you had ", "")
-                     .replace("Are you ", "")
-                     .replace("Did you ", "")
-                     .replace("Is there ", "")
-                     .replace("Do you ", "")
-                     .replace("Have you ", "")
-                     .replace("Has your ", "")
-                     .replace("?", "")
-                     .strip()
-                     .capitalize())
-        else:
-            label = raw_label.replace("_", " ").capitalize()
+        label = _clean_symptom_label(raw_label)
+
+        if label is None:
+            procedure_codes.add(code)
+            symptom_names[code] = raw_label
+            continue
 
         if len(label) > 60:
             label = label[:57] + "..."
@@ -189,21 +213,80 @@ def save_artifacts(G, diagnoses, symptoms, procedures, adj_matrix,
     print(f"   graph_metadata.json, diagnosis_tests.json, knowledge_graph.pkl,")
 
 def visualize_sample(G, conditions):
-    example = list(conditions.keys())[0]
-    neighbors = list(G.neighbors(example))[:12]
-    sub = G.subgraph([example] + neighbors)
+    diag_list = list(conditions.keys())
+
+    best_trio = diag_list[:3]
+    best_shared = -1
+    for i in range(min(len(diag_list), 15)):
+        for j in range(i + 1, min(len(diag_list), 15)):
+            for k in range(j + 1, min(len(diag_list), 15)):
+                a, b, c = diag_list[i], diag_list[j], diag_list[k]
+                sa = set(G.neighbors(a))
+                sb = set(G.neighbors(b))
+                sc = set(G.neighbors(c))
+                shared = len(sa & sb) + len(sa & sc) + len(sb & sc)
+                if shared > best_shared:
+                    best_shared, best_trio = shared, [a, b, c]
+
+    chosen_diags = best_trio
+
+    sym_nodes = set()
+    for diag in chosen_diags:
+        candidates = [
+            (n, d["weight"])
+            for n, d in G[diag].items()
+            if G.nodes[n].get("node_type") == "symptom"
+        ]
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        n_cand = len(candidates)
+        if n_cand == 0:
+            continue
+        top_s = candidates[:3]
+        mid_s = candidates[n_cand // 3 : n_cand // 3 + 3]
+        low_s = candidates[max(n_cand - 3, 0):]
+        picked = {n for n, _ in top_s + mid_s + low_s}
+        sym_nodes.update(picked)
+
+    all_nodes = set(chosen_diags) | sym_nodes
+    sub = G.subgraph(all_nodes)
 
     color_map = {"diagnosis": "#e74c3c", "symptom": "#3498db",
                  "antecedent": "#2ecc71", "procedure": "#f39c12"}
     colors = [color_map.get(G.nodes[n].get("node_type"), "#95a5a6") for n in sub.nodes()]
-    sizes  = [2000 if G.nodes[n].get("node_type") == "diagnosis" else 900 for n in sub.nodes()]
-    weights = [sub[u][v]["weight"] * 4 for u, v in sub.edges()]
+    sizes  = [2200 if G.nodes[n].get("node_type") == "diagnosis" else 800
+              for n in sub.nodes()]
+    edge_widths = [sub[u][v]["weight"] * 5 for u, v in sub.edges()]
 
-    fig, ax = plt.subplots(figsize=(16, 10))
-    pos = nx.spring_layout(sub, seed=42, k=3)
-    nx.draw(sub, pos, ax=ax, node_color=colors, node_size=sizes,
-            width=weights, with_labels=True, font_size=8, font_weight="bold")
-    ax.set_title(f"Граф знань: «{example}»", fontsize=13)
+    fig, ax = plt.subplots(figsize=(20, 13))
+    pos = nx.spring_layout(sub, seed=42, k=2.5)
+
+    nx.draw_networkx_nodes(sub, pos, ax=ax, node_color=colors,
+                           node_size=sizes, alpha=0.92)
+    nx.draw_networkx_labels(sub, pos, ax=ax, font_size=7, font_weight="bold")
+    nx.draw_networkx_edges(sub, pos, ax=ax, width=edge_widths,
+                           alpha=0.55, edge_color="#555555")
+
+    edge_labels = {(u, v): f"{sub[u][v]['weight']:.2f}" for u, v in sub.edges()}
+    nx.draw_networkx_edge_labels(sub, pos, edge_labels=edge_labels,
+                                 ax=ax, font_size=6, font_color="#c0392b",
+                                 bbox=dict(boxstyle="round,pad=0.15",
+                                           fc="white", alpha=0.7, ec="none"))
+
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor="#e74c3c", label="Діагноз"),
+        Patch(facecolor="#3498db", label="Симптом"),
+        Patch(facecolor="#2ecc71", label="Антецедент"),
+        Patch(facecolor="#f39c12", label="Процедура"),
+    ]
+    ax.legend(handles=legend_elements, loc="upper left", fontsize=9,
+              framealpha=0.85)
+
+    title_names = ", ".join(f"«{d}»" for d in chosen_diags)
+    ax.set_title(f"Граф знань: {title_names}\n"
+                 f"(спільних сусідів між парами: {best_shared})",
+                 fontsize=11)
+    ax.axis("off")
 
     save_path = os.path.join(SAVE_DIR, "graph_sample.png")
     fig.savefig(save_path, dpi=150, bbox_inches="tight")

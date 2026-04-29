@@ -1,4 +1,5 @@
 import json
+import re
 from sklearn.metrics.pairwise import cosine_similarity
 
 from UtilsBert import encode_text
@@ -51,6 +52,51 @@ class EvaluationEngine:
             }
         return result
 
+    _POLITE_PATTERNS = [
+        r"\bplease\b", r"\bkindly\b", r"\bwould you\b", r"\bcould you\b",
+        r"\bthank(s| you)\b", r"\bi('d| would) like\b", r"\bmay i\b",
+        r"\bif you don'?t mind\b", r"\bexcuse me\b", r"\bi appreciate\b",
+        r"\bsorry to\b", r"\bi understand\b", r"\bi see\b",
+        r"\bwould it be possible\b", r"\bare you comfortable\b",
+        r"\bfeel free\b", r"\btake your time\b",
+    ]
+    _RUDE_PATTERNS = [
+        r"\bstupid\b", r"\bidiot\b", r"\bdumb\b", r"\bjust (do|tell|answer)\b",
+        r"\bshut up\b", r"\bwhatever\b", r"\bi don'?t care\b",
+        r"\bhurry up\b", r"\byou must\b", r"\byou have to\b",
+        r"\bdo it now\b", r"\bnow!\b", r"\bimmediately\b",
+        r"!{2,}", r"[A-Z]{5,}",
+    ]
+    _EMPATHY_PATTERNS = [
+        r"\bi know (this|it|that)\b", r"\bdon'?t worry\b",
+        r"\beverything (will|is)\b", r"\bwe'?re here\b",
+        r"\byou'?re (doing|feeling)\b", r"\bi'?m (here|listening)\b",
+        r"\blet me (explain|help|clarify)\b", r"\bi'?ll make sure\b",
+        r"\bwe can\b", r"\btell me more\b",
+    ]
+
+    def score_communication(self, text: str) -> dict:
+        low = text.lower()
+        pol_hits   = sum(1 for p in self._POLITE_PATTERNS  if re.search(p, low))
+        emp_hits   = sum(1 for p in self._EMPATHY_PATTERNS if re.search(p, low))
+        rude_flags = [p for p in self._RUDE_PATTERNS       if re.search(p, low)]
+        rude_hits  = len(rude_flags)
+        words      = max(len(text.split()), 1)
+        politeness = min(pol_hits / max(words / 8, 1), 1.0)
+        empathy    = min(emp_hits / max(words / 8, 1), 1.0)
+        rudeness   = min(rude_hits / 2, 1.0)
+        raw        = (politeness + empathy) / 2
+        comm_score = max(0.0, raw * (1 - rudeness) - rudeness * 0.15)
+        if pol_hits == 0 and emp_hits == 0 and rude_hits == 0:
+            comm_score = 0.5
+        return {
+            "politeness": round(politeness,  3),
+            "empathy":    round(empathy,     3),
+            "rudeness":   round(rudeness,    3),
+            "comm_score": round(comm_score,  3),
+            "flags":      rude_flags,
+        }
+
     def calculate_step_metrics(self, action_text: str,
                                true_diagnosis: str,
                                delta_h: float) -> dict:
@@ -73,11 +119,18 @@ class EvaluationEngine:
             if max_p > self.penalty_threshold:
                 penalty = self.w_side * max_p
 
-        step_score = self.w1 * delta_h + self.w2 * r_score - penalty
+        comm = self.score_communication(action_text)
+        comm_bonus = 0.05 * comm["comm_score"] - 0.10 * comm["rudeness"]
+        step_score = self.w1 * delta_h + self.w2 * r_score - penalty + comm_bonus
 
         return {
-            "r_score": round(float(r_score), 4),
-            "penalty": round(float(penalty), 4),
+            "r_score":    round(float(r_score), 4),
+            "penalty":    round(float(penalty), 4),
+            "comm_score": comm["comm_score"],
+            "politeness": comm["politeness"],
+            "empathy":    comm["empathy"],
+            "rudeness":   comm["rudeness"],
+            "rude_flags": comm["flags"],
             "total_step": round(float(step_score), 4),
         }
 
@@ -107,11 +160,27 @@ class EvaluationEngine:
 
             type_label = "ТЕСТ" if entry.get('type') == 'test' else "ПИТАННЯ"
             print(f"Крок {entry['step']} [{type_label}]: '{entry['query']}'")
-            print(f"   IG: {entry.get('ig', 0):+.4f} | Бал: {m['total_step']:.2f} (Penalty: {m['penalty']:.2f})")
+            comm_bar = "\u2605" * round(m['comm_score'] * 5) + "\u2606" * (5 - round(m['comm_score'] * 5))
+            rude_warn = f"  \u26a0 {m['rude_flags']}" if m['rude_flags'] else ""
+            print(f"   IG: {entry.get('ig', 0):+.4f} | Бал: {m['total_step']:.2f} "
+                  f"(Penalty: {m['penalty']:.2f}) | "
+                  f"Комунікація [{comm_bar}] {m['comm_score']:.2f}{rude_warn}")
 
         print("-" * 70)
         print(f"ПІДСУМКОВИЙ БАЛ КОМПЕТЕНЦІЙ: {round(total_score, 2)}")
         print(f"Загальний інф. приріст (IG): {round(total_ig, 4)}")
+
+        all_m = [self.calculate_step_metrics(e['query'], true_diagnosis, e.get('ig', 0))
+                 for e in session_log]
+        avg_comm  = sum(m['comm_score'] for m in all_m) / max(len(all_m), 1)
+        avg_pol   = sum(m['politeness'] for m in all_m) / max(len(all_m), 1)
+        avg_emp   = sum(m['empathy']    for m in all_m) / max(len(all_m), 1)
+        n_rude    = sum(1 for m in all_m if m['rudeness'] > 0)
+        cbar = "\u2605" * round(avg_comm * 5) + "\u2606" * (5 - round(avg_comm * 5))
+        print(f"\nКОМУНІКАЦІЯ [{cbar}] {avg_comm:.2f}  "
+              f"(ввічливість: {avg_pol:.2f} | емпатія: {avg_emp:.2f})")
+        if n_rude:
+            print(f"  \u26a0  Грубих реплік: {n_rude} \u2014 знижує загальну оцінку!")
 
         if critical_errors > 0:
             print(f"УВАГА: Виявлено {critical_errors} критичних помилок (Red Flags)!")

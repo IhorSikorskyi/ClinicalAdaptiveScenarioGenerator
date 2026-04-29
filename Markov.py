@@ -15,14 +15,17 @@ from SmartVirtualPatient import SmartVirtualPatient
 from VirtualPatientEngine import VirtualPatientEngine
 # from SessionMDP import SessionMDP
 
-DATA_DIR = "Dataset/"
-SAVE_DIR = "DataSaves/"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = BASE_DIR
+
+DATA_DIR = os.path.join(PROJECT_ROOT, "Dataset")
+SAVE_DIR = os.path.join(PROJECT_ROOT, "DataSaves")
 N_STEPS = 12
 
 
 def load_artifacts() -> dict:
     def _path(name):
-        return os.path.join(SAVE_DIR, name)
+        return os.path.join(BASE_DIR, "DataSaves", name)
 
     with open(_path("graph_metadata.json"), "r", encoding="utf-8") as f:
         metadata = json.load(f)
@@ -136,7 +139,12 @@ def run_test_session_default(virtual_patient, patient_model, selector, diagnoses
             "metrics": step_metrics
         })
 
-        print(f"Step {step} [{act_type}]: {best_act}")
+        type_label = "🔬 ТЕСТ" if act_type == "test" else "? ПИТАННЯ"
+        print(f"\nStep {step} [{type_label}]: {best_act}")
+        print(f"  Пацієнт: {answer}")
+        if newly_revealed:
+            revealed_str = ", ".join(s for s, _ in newly_revealed)
+            print(f"  иявлено симптоми: {revealed_str}")
         print(f"  ΔH: {dH:+.4f} | R-score: {step_metrics['r_score']:.3f} | Score: {step_metrics['total_step']:.2f}")
 
         H_prev = H_new
@@ -216,7 +224,12 @@ def run_test_session(virtual_patient, patient_model, selector, diagnoses, arts, 
             "metrics": step_metrics
         })
 
-        print(f"Step {step} [{act_type}]: {best_act}")
+        type_label = "🔬 ТЕСТ" if act_type == "test" else "? ПИТАННЯ"
+        print(f"\nStep {step} [{type_label}]: {best_act}")
+        print(f"  Пацієнт: {answer}")
+        if newly_revealed:
+            revealed_str = ", ".join(s for s, _ in newly_revealed)
+            print(f"  Виявлено симптоми: {revealed_str}")
         print(f"  ΔH: {dH:+.4f} | R-score: {step_metrics['r_score']:.3f} | Score: {step_metrics['total_step']:.2f}")
 
         H_prev = H_new
@@ -294,7 +307,7 @@ def main():
     arts = load_artifacts()
     random.seed(42)
 
-    llama = VirtualPatientEngine(model_name="llama3.1")
+    gemma = VirtualPatientEngine(model_name="gemma3:12b")
 
     pm = PatientModel(
         arts["diagnoses"],
@@ -323,7 +336,7 @@ def main():
         patient_row,
         G,
         arts["symptom_names_dict"],
-        llama
+        gemma
     )
 
     selector = AdaptiveQuestionSelector(
