@@ -35,7 +35,7 @@ class SessionReport:
     student_diagnosis: str = ""
     true_diagnosis: str = ""
     diagnosis_correct: bool = False
-    terminal_bonus: float = 0.0   # бонус за правильний кінцевий діагноз
+    terminal_bonus: float = 0.0
     final_score: float = 0.0
 
 def compute_reward(
@@ -73,7 +73,7 @@ class SessionMDP:
         self.reward_kwargs = reward_kwargs or {}
 
         self._steps: list[MDPStep] = []
-        self._snapshots: list[dict] = []   # стан моделі ДО кожного кроку студента
+        self._snapshots: list[dict] = []
 
     def record_student_action(
         self,

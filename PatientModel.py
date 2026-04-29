@@ -32,7 +32,6 @@ class PatientModel:
         self._adj_base = adj_tfidf / row_norms
         self.adj_matrix = self._adj_base.copy()
 
-        # Вектори станів
         self.diag_scores = np.zeros(len(diagnoses))
         self.symp_scores = np.zeros(len(symptoms))
 
@@ -57,7 +56,7 @@ class PatientModel:
             return
 
         exp_d = np.exp(self.diag_scores - self.diag_scores.max())
-        p_diag = exp_d / (exp_d.sum() + 1e-12)   # shape: (D,)
+        p_diag = exp_d / (exp_d.sum() + 1e-12)
 
         for j in confirmed_symp_indices:
             self.adj_matrix[:, j] += self.eta * p_diag

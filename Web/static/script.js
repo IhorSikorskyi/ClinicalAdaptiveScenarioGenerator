@@ -280,7 +280,7 @@ function selectLang(lang) {
   applyUILang();
 }
 
-// Apply UI lang on page load (default: uk)
+// Apply UI lang on page load (default: en)
 document.addEventListener('DOMContentLoaded', applyUILang);
 
 // ── Start Session ─────────────────────────────────────────
@@ -313,7 +313,6 @@ socket.on('session_ready', data => {
   updateEntropy(data.h0, null);
 
   diagnosisNames = data.diagnoses || [];
-  // Build {display, raw} pairs — server sends translated display + original raw list in order
   const rawProcs  = data.procedures_raw  || data.procedures || [];
   const dispProcs = data.procedures || [];
   realProcedures = rawProcs.map((raw, i) => ({
@@ -372,7 +371,6 @@ let TEST_CATALOG = [];
 const PROC_CATEGORIES = [
   {
     key: 'catBlood',
-    // blood tests, labs, markers — matched against raw English text
     keywords: [
       'blood', 'glucose', 'crp', 'c-reactive', 'troponin', 'd-dimer',
       'liver', 'kidney', 'thyroid', 'coagulation', 'hemoglobin',
@@ -422,9 +420,6 @@ const PROC_CATEGORIES = [
   },
 ];
 
-// Symptom-question keywords — questions about symptoms go to catOther unless matched above.
-// But we also use content heuristics: questions that look like clinical history questions
-// are split into sub-categories based on body-system keywords in their text.
 const SYMPTOM_BLOOD_HINTS = [
   'blood in', 'blood clot', 'red blood', 'dark stool', 'black stool',
   'bleeding', 'hemorrh', 'blood pressure', 'hypertension',
@@ -443,14 +438,12 @@ const SYMPTOM_FUNCTIONAL_HINTS = [
 function categorizeProcedureRaw(name) {
   const low = name.toLowerCase();
 
-  // 1. Try the standard procedure-keyword match first
   for (const cat of PROC_CATEGORIES) {
     if (cat.keywords.some(kw => low.includes(kw))) {
       return { catKey: cat.key, icon: cat.icon };
     }
   }
 
-  // 2. Symptom-question heuristics — classify by clinical content
   if (SYMPTOM_BLOOD_HINTS.some(kw => low.includes(kw))) {
     return { catKey: 'catBlood', icon: '🩸' };
   }

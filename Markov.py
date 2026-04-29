@@ -13,7 +13,6 @@ from UtilsBert import embed_action
 from Evaluation import EvaluationEngine
 from SmartVirtualPatient import SmartVirtualPatient
 from VirtualPatientEngine import VirtualPatientEngine
-# from SessionMDP import SessionMDP
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = BASE_DIR
@@ -347,10 +346,6 @@ def main():
     )
 
     run_test_session(svp, pm, selector, arts["diagnoses"], arts, n_steps=N_STEPS)
-
-    # run_test_session_default(vp, pm, selector, arts["diagnoses"], arts, n_steps=N_STEPS)
-
-    # run_session(svp, pm, arts["diagnoses"], arts)
 
     with open(os.path.join(SAVE_DIR, "patient_model_class.pkl"), "wb") as f:
         pickle.dump(pm, f)
