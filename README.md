@@ -180,11 +180,15 @@ project/
 │   ├── symptom_name_vectors.npy
 │   ├── symptom_questions.json
 │   └── diagnosis_tests.json
-├── templates/
-│   └── index.html
-├── static/
-│   ├── style.css
-│   └── script.js
+├── Web/                              # Web application
+│   ├── DataSaves/                    # Generated artefacts (created at runtime)
+│   │   └── question_embeddings_cache.npz
+│   ├── static/
+│   │   ├── script.js
+│   │   └── style.css
+│   ├── templates/
+│   │   └── index.html
+│   └── app.py
 ├── Preprocessing.py
 ├── BioBert.py
 ├── PatientModel.py
@@ -197,7 +201,6 @@ project/
 ├── BaseScoringLogic.py
 ├── UtilsBert.py
 ├── Markov.py
-├── app.py
 └── README.md
 ```
 
