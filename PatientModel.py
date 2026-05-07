@@ -54,24 +54,31 @@ class PatientModel:
         self.step        = snap["step"]
 
     def _update_adj(self, confirmed_symp_indices: list[int]) -> None:
-        if not confirmed_symp_indices:
-            return
-
         exp_d = np.exp(self.diag_scores - self.diag_scores.max())
         p_diag = exp_d / (exp_d.sum() + 1e-12)
 
-        for j in confirmed_symp_indices:
-            self.adj_matrix[:, j] += self.eta * p_diag
+        if confirmed_symp_indices:
+            for j in confirmed_symp_indices:
+                self.adj_matrix[:, j] += self.eta * p_diag
 
-        not_confirmed = np.ones(len(self.symptoms), dtype=bool)
-        not_confirmed[confirmed_symp_indices] = False
-        self.adj_matrix[:, not_confirmed] = (
-            (1 - self.eta * 0.3) * self.adj_matrix[:, not_confirmed]
-            + self.eta * 0.3 * self._adj_base[:, not_confirmed]
-        )
+            if self.adaptive_adj:
+                not_confirmed = np.ones(len(self.symptoms), dtype=bool)
+                not_confirmed[confirmed_symp_indices] = False
+                self.adj_matrix[:, not_confirmed] = (
+                        (1 - self.eta * self.adj_decay) * self.adj_matrix[:, not_confirmed]
+                        + self.eta * self.adj_decay * self._adj_base[:, not_confirmed]
+                )
+        else:
+            if self.adaptive_adj:
+                soft_signal = self.symp_scores.clip(0)
+                soft_signal = soft_signal / (soft_signal.sum() + 1e-12)
+                self.adj_matrix += self.eta * 0.05 * np.outer(p_diag, soft_signal)
+                self.adj_matrix = (
+                        (1 - self.eta * 0.02) * self.adj_matrix
+                        + self.eta * 0.02 * self._adj_base
+                )
 
         np.clip(self.adj_matrix, 0.0, self.w_clip, out=self.adj_matrix)
-
         row_norms = np.linalg.norm(self.adj_matrix, axis=1, keepdims=True)
         row_norms = np.maximum(row_norms, 1.0)
         self.adj_matrix /= row_norms
@@ -101,19 +108,14 @@ class PatientModel:
         raw_symp = self.decay * self.symp_scores + (self.beta * sparse_symp * multiplier)
         self.symp_scores = np.tanh(raw_symp)
 
-        if self.adaptive_adj:
-            self._update_adj(confirmed_indices)
+        self._update_adj(confirmed_indices)
 
         diagnosis_from_symptoms = self.adj_matrix @ self.symp_scores
         direct_diagnosis_sim = cosine_similarity(action_vector.reshape(1, -1), self.diag_vectors)[0]
 
-        if self.adaptive_adj:
-            raw_diag = (self.decay * self.diag_scores
-                        + 0.8 * diagnosis_from_symptoms
-                        + 0.2 * self.beta * direct_diagnosis_sim)
-        else:
-            raw_diag = (self.decay * self.diag_scores
-                    + diagnosis_from_symptoms)
+        raw_diag = (self.decay * self.diag_scores
+                    + 0.8 * diagnosis_from_symptoms
+                    + 0.2 * self.beta * direct_diagnosis_sim)
         self.diag_scores = np.tanh(raw_diag)
 
         return np.concatenate([self.diag_scores, self.symp_scores])
