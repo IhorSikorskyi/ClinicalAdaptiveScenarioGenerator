@@ -8,7 +8,8 @@ class PatientModel:
                  decay: float = 0.85,
                  top_k: int = 5,
                  eta: float = 0.15,
-                 w_clip: float = 3.0):
+                 w_clip: float = 3.0,
+                 adaptive_adj: bool = True):
 
         self.diagnoses = diagnoses
         self.symptoms  = symptoms
@@ -17,6 +18,7 @@ class PatientModel:
         self.top_k = top_k
         self.eta   = eta
         self.w_clip = w_clip
+        self.adaptive_adj = adaptive_adj
 
         self.diag_vectors = diag_vectors / np.linalg.norm(diag_vectors, axis=1, keepdims=True)
         self.symp_vectors = symp_vectors / np.linalg.norm(symp_vectors, axis=1, keepdims=True)
@@ -71,7 +73,7 @@ class PatientModel:
         np.clip(self.adj_matrix, 0.0, self.w_clip, out=self.adj_matrix)
 
         row_norms = np.linalg.norm(self.adj_matrix, axis=1, keepdims=True)
-        row_norms[row_norms == 0] = 1
+        row_norms = np.maximum(row_norms, 1.0)
         self.adj_matrix /= row_norms
 
     def update_state(self, action_vector: np.ndarray,
@@ -99,14 +101,19 @@ class PatientModel:
         raw_symp = self.decay * self.symp_scores + (self.beta * sparse_symp * multiplier)
         self.symp_scores = np.tanh(raw_symp)
 
-        self._update_adj(confirmed_indices)
+        if self.adaptive_adj:
+            self._update_adj(confirmed_indices)
 
         diagnosis_from_symptoms = self.adj_matrix @ self.symp_scores
         direct_diagnosis_sim = cosine_similarity(action_vector.reshape(1, -1), self.diag_vectors)[0]
 
-        raw_diag = (self.decay * self.diag_scores
-                    + 0.8 * diagnosis_from_symptoms
-                    + 0.2 * self.beta * direct_diagnosis_sim)
+        if self.adaptive_adj:
+            raw_diag = (self.decay * self.diag_scores
+                        + 0.8 * diagnosis_from_symptoms
+                        + 0.2 * self.beta * direct_diagnosis_sim)
+        else:
+            raw_diag = (self.decay * self.diag_scores
+                    + diagnosis_from_symptoms)
         self.diag_scores = np.tanh(raw_diag)
 
         return np.concatenate([self.diag_scores, self.symp_scores])

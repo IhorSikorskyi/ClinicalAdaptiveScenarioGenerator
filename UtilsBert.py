@@ -26,7 +26,7 @@ def ensure_model():
 
 def encode_text(text: str) -> np.ndarray:
     ensure_model()
-    inputs = _tokenizer(text, return_tensors="pt", truncation=True, max_length=64, padding=True).to(_device)
+    inputs = _tokenizer(text, return_tensors="pt", truncation=True, max_length=128, padding=True).to(_device)
     with torch.no_grad():
         out = _model(**inputs)
     return out.last_hidden_state[:, 0, :].cpu().numpy().squeeze()

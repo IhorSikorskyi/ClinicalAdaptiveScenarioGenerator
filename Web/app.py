@@ -63,6 +63,7 @@ def handle_init(data):
             arts["diagnoses"], arts["symptoms"],
             arts["adj_matrix"], arts["diag_vectors"], arts["symp_vectors"],
             beta=0.3, decay=0.96, top_k=3,
+            adaptive_adj=False,   # матриця незмінна: студент — актор, не автомат
         )
 
         socketio.emit("load_progress", {"msg": "Завантаження графа знань..."}, room=sid)
