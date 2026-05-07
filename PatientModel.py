@@ -65,8 +65,8 @@ class PatientModel:
                 not_confirmed = np.ones(len(self.symptoms), dtype=bool)
                 not_confirmed[confirmed_symp_indices] = False
                 self.adj_matrix[:, not_confirmed] = (
-                        (1 - self.eta * self.adj_decay) * self.adj_matrix[:, not_confirmed]
-                        + self.eta * self.adj_decay * self._adj_base[:, not_confirmed]
+                        (1 - self.eta * self.decay) * self.adj_matrix[:, not_confirmed]
+                        + self.eta * self.decay * self._adj_base[:, not_confirmed]
                 )
         else:
             if self.adaptive_adj:
